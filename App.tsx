@@ -267,26 +267,35 @@ const App = () => {
   // SPEAKER
   // =============================================
 
-  const handleSpeak = () => {
+ const handleSpeak = () => {
+  if (display === 'Error' || !display) {
+    return;
+  }
 
-    if (
-      display === 'Error' ||
-      !display
-    ) {
-      return;
-    }
-
-    Tts.stop();
-
-    const spokenNumber =
-      display
-        .replace(/-/g, 'negative ')
-        .replace(/\./g, ' point ');
-
-    Tts.speak(
-      `The answer is ${spokenNumber}`,
-    );
+  const numberWords: { [key: string]: string } = {
+    '0': 'zero',
+    '1': 'one',
+    '2': 'two',
+    '3': 'three',
+    '4': 'four',
+    '5': 'five',
+    '6': 'six',
+    '7': 'seven',
+    '8': 'eight',
+    '9': 'nine',
+    '.': 'point',
+    '-': 'negative',
   };
+
+  const spokenNumber = String(display)
+    .split('')
+    .map(char => numberWords[char] || char)
+    .join(' ');
+
+  Tts.stop();
+
+  Tts.speak(`The answer is ${spokenNumber}`);
+};
 
 
   // =============================================
