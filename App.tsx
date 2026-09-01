@@ -1,5 +1,4 @@
-
-import React, { useState } from 'react';
+import React, {useEffect, useState} from 'react';
 
 import {
   SafeAreaView,
@@ -7,6 +6,8 @@ import {
   Text,
   StyleSheet,
   StatusBar,
+  TouchableOpacity,
+  FlatList,
 } from 'react-native';
 
 import Tts from 'react-native-tts';
@@ -16,6 +17,14 @@ import CalculatorButton from './android/components/CalculatorButton';
 import {
   calculateExpression,
 } from './android/utils/calculator';
+
+import {
+  initializeDatabase,
+  saveCalculation,
+  getCalculations,
+  deleteCalculation,
+  clearHistory,
+} from './src/database/database';
 
 import {
   AngleMode,
@@ -56,6 +65,41 @@ const App = () => {
   const [angleMode, setAngleMode] =
     useState<AngleMode>('DEG');
 
+  // HISTORY STATE
+
+  const [history, setHistory] =
+    useState<any[]>([]);
+
+  const [showHistory, setShowHistory] =
+    useState(false);
+
+
+  // =============================================
+  // DATABASE INITIALIZATION
+  // =============================================
+
+  useEffect(() => {
+    initializeDatabase();
+    loadHistory();
+  }, []);
+
+
+  // =============================================
+  // LOAD HISTORY
+  // =============================================
+
+ const loadHistory = () => {
+  try {
+    const data = getCalculations();
+
+    setHistory(data._array);
+  } catch (error) {
+    console.error(
+      'Error loading history:',
+      error,
+    );
+  }
+};
 
   // =============================================
   // NUMBER
@@ -185,6 +229,15 @@ const App = () => {
 
       setCalculated(true);
 
+      // SAVE CALCULATION
+
+      saveCalculation(
+        fullExpression,
+        result,
+      );
+
+      loadHistory();
+
     } catch {
 
       setDisplay('Error');
@@ -267,35 +320,50 @@ const App = () => {
   // SPEAKER
   // =============================================
 
- const handleSpeak = () => {
-  if (display === 'Error' || !display) {
-    return;
-  }
+  const handleSpeak = () => {
 
-  const numberWords: { [key: string]: string } = {
-    '0': 'zero',
-    '1': 'one',
-    '2': 'two',
-    '3': 'three',
-    '4': 'four',
-    '5': 'five',
-    '6': 'six',
-    '7': 'seven',
-    '8': 'eight',
-    '9': 'nine',
-    '.': 'point',
-    '-': 'negative',
+    if (
+      display === 'Error' ||
+      !display
+    ) {
+      return;
+    }
+
+    const numberWords: {
+      [key: string]: string;
+    } = {
+
+      '0': 'zero',
+      '1': 'one',
+      '2': 'two',
+      '3': 'three',
+      '4': 'four',
+      '5': 'five',
+      '6': 'six',
+      '7': 'seven',
+      '8': 'eight',
+      '9': 'nine',
+
+      '.': 'point',
+
+      '-': 'negative',
+    };
+
+    const spokenNumber =
+      String(display)
+        .split('')
+        .map(
+          char =>
+            numberWords[char] || char,
+        )
+        .join(' ');
+
+    Tts.stop();
+
+    Tts.speak(
+      `The answer is ${spokenNumber}`,
+    );
   };
-
-  const spokenNumber = String(display)
-    .split('')
-    .map(char => numberWords[char] || char)
-    .join(' ');
-
-  Tts.stop();
-
-  Tts.speak(`The answer is ${spokenNumber}`);
-};
 
 
   // =============================================
@@ -379,40 +447,56 @@ const App = () => {
 
         case 'sqrt':
 
-          result = calculateSqrt(value);
+          result = calculateSqrt(
+            value,
+          );
 
           break;
 
         case 'square':
 
-          result = calculateSquare(value);
+          result = calculateSquare(
+            value,
+          );
 
           break;
 
         case 'log':
 
-          result = calculateLog(value);
+          result = calculateLog(
+            value,
+          );
 
           break;
 
         case 'ln':
 
-          result = calculateLn(value);
+          result = calculateLn(
+            value,
+          );
 
           break;
 
         case 'factorial':
 
-          result = factorial(value);
+          result = factorial(
+            value,
+          );
 
           break;
 
         default:
+
           return;
       }
 
+      const formattedResult =
+        formatScientificResult(
+          result,
+        );
+
       setDisplay(
-        formatScientificResult(result),
+        formattedResult,
       );
 
       setExpression(
@@ -420,6 +504,15 @@ const App = () => {
       );
 
       setCalculated(true);
+
+      // SAVE SCIENTIFIC CALCULATION
+
+      saveCalculation(
+        `${operation}(${display})`,
+        formattedResult,
+      );
+
+      loadHistory();
 
     } catch {
 
@@ -438,9 +531,10 @@ const App = () => {
 
   const handlePi = () => {
 
-    setDisplay(
-      formatScientificResult(PI),
-    );
+    const result =
+      formatScientificResult(PI);
+
+    setDisplay(result);
 
     setExpression('');
 
@@ -454,9 +548,10 @@ const App = () => {
 
   const handleE = () => {
 
-    setDisplay(
-      formatScientificResult(E),
-    );
+    const result =
+      formatScientificResult(E);
+
+    setDisplay(result);
 
     setExpression('');
 
@@ -492,6 +587,52 @@ const App = () => {
 
 
   // =============================================
+  // DELETE HISTORY ITEM
+  // =============================================
+
+  const handleDeleteHistory = (
+    id: number,
+  ) => {
+
+    try {
+
+      deleteCalculation(id);
+
+      loadHistory();
+
+    } catch (error) {
+
+      console.error(
+        'Error deleting history:',
+        error,
+      );
+    }
+  };
+
+
+  // =============================================
+  // CLEAR HISTORY
+  // =============================================
+
+  const handleClearHistory = () => {
+
+    try {
+
+      clearHistory();
+
+      loadHistory();
+
+    } catch (error) {
+
+      console.error(
+        'Error clearing history:',
+        error,
+      );
+    }
+  };
+
+
+  // =============================================
   // DISPLAY
   // =============================================
 
@@ -499,7 +640,9 @@ const App = () => {
 
     return (
 
-      <View style={styles.displayContainer}>
+      <View
+        style={styles.displayContainer}
+      >
 
         <Text
           style={styles.expression}
@@ -536,6 +679,219 @@ const App = () => {
 
 
   // =============================================
+  // HISTORY BUTTON
+  // =============================================
+
+  const renderHistoryButton = () => {
+
+    return (
+
+      <View
+        style={styles.historyContainer}
+      >
+
+        <TouchableOpacity
+          style={styles.historyModeButton}
+          onPress={() => {
+            loadHistory();
+            setShowHistory(true);
+          }}
+        >
+
+          <Text
+            style={styles.historyButtonText}
+          >
+            HISTORY
+          </Text>
+
+        </TouchableOpacity>
+
+      </View>
+    );
+  };
+
+
+  // =============================================
+  // HISTORY SCREEN
+  // =============================================
+
+  const renderHistory = () => {
+
+    if (!showHistory) {
+      return null;
+    }
+
+    return (
+
+      <View
+        style={styles.historyOverlay}
+      >
+
+        <View
+          style={styles.historyContainer}
+        >
+
+          {/* HEADER */}
+
+          <View
+            style={styles.historyHeader}
+          >
+
+            <Text
+              style={styles.historyTitle}
+            >
+              Calculation History
+            </Text>
+
+            <TouchableOpacity
+              onPress={() =>
+                setShowHistory(false)
+              }
+            >
+
+              <Text
+                style={styles.closeButton}
+              >
+                ✕
+              </Text>
+
+            </TouchableOpacity>
+
+          </View>
+
+
+          {/* HISTORY LIST */}
+
+          <FlatList
+            data={history}
+            keyExtractor={item =>
+              item.id.toString()
+            }
+            showsVerticalScrollIndicator={false}
+
+            ListEmptyComponent={
+
+              <View
+                style={
+                  styles.emptyHistoryContainer
+                }
+              >
+
+                <Text
+                  style={styles.emptyHistory}
+                >
+                  No calculations yet
+                </Text>
+
+              </View>
+            }
+
+            renderItem={({
+              item,
+            }) => (
+
+              <View
+                style={styles.historyItem}
+              >
+
+                <View
+                  style={
+                    styles.historyTextContainer
+                  }
+                >
+
+                  <Text
+                    style={
+                      styles.historyExpression
+                    }
+                    numberOfLines={1}
+                  >
+                    {item.expression}
+                  </Text>
+
+                  <Text
+                    style={
+                      styles.historyResult
+                    }
+                    numberOfLines={1}
+                  >
+                    = {item.result}
+                  </Text>
+
+                  <Text
+                    style={
+                      styles.historyDate
+                    }
+                  >
+                    {item.created_at
+                      ? new Date(
+                          item.created_at,
+                        ).toLocaleString()
+                      : ''}
+                  </Text>
+
+                </View>
+
+
+                <TouchableOpacity
+                  style={
+                    styles.deleteHistoryButton
+                  }
+                  onPress={() =>
+                    handleDeleteHistory(
+                      item.id,
+                    )
+                  }
+                >
+
+                  <Text
+                    style={
+                      styles.deleteHistoryText
+                    }
+                  >
+                    🗑
+                  </Text>
+
+                </TouchableOpacity>
+
+              </View>
+            )}
+          />
+
+
+          {/* CLEAR HISTORY */}
+
+          {history.length > 0 && (
+
+            <TouchableOpacity
+              style={
+                styles.clearHistoryButton
+              }
+              onPress={
+                handleClearHistory
+              }
+            >
+
+              <Text
+                style={
+                  styles.clearHistoryText
+                }
+              >
+                CLEAR HISTORY
+              </Text>
+
+            </TouchableOpacity>
+
+          )}
+
+        </View>
+
+      </View>
+    );
+  };
+
+
+  // =============================================
   // BASIC CALCULATOR
   // =============================================
 
@@ -548,14 +904,37 @@ const App = () => {
         {/* SCI BUTTON */}
 
         <View
-          style={styles.modeButton}
+          style={styles.topButtonsRow}
         >
 
-          <CalculatorButton
-            title="SCI"
-            onPress={toggleScientificMode}
-            variant="special"
-          />
+          <View
+            style={styles.modeButton}
+          >
+
+            <CalculatorButton
+              title="SCI"
+              onPress={
+                toggleScientificMode
+              }
+              variant="special"
+            />
+
+          </View>
+
+          <View
+            style={styles.historyModeButton}
+          >
+
+            <CalculatorButton
+              title="HIST"
+              onPress={() => {
+                loadHistory();
+                setShowHistory(true);
+              }}
+              variant="special"
+            />
+
+          </View>
 
         </View>
 
@@ -752,14 +1131,37 @@ const App = () => {
         {/* BASIC/SCIENTIFIC TOGGLE */}
 
         <View
-          style={styles.modeButton}
+          style={styles.topButtonsRow}
         >
 
-          <CalculatorButton
-            title="BASIC"
-            onPress={toggleScientificMode}
-            variant="special"
-          />
+          <View
+            style={styles.modeButton}
+          >
+
+            <CalculatorButton
+              title="BASIC"
+              onPress={
+                toggleScientificMode
+              }
+              variant="special"
+            />
+
+          </View>
+
+          <View
+            style={styles.historyModeButton}
+          >
+
+            <CalculatorButton
+              title="HIST"
+              onPress={() => {
+                loadHistory();
+                setShowHistory(true);
+              }}
+              variant="special"
+            />
+
+          </View>
 
         </View>
 
@@ -871,7 +1273,9 @@ const App = () => {
           <CalculatorButton
             title="x!"
             onPress={() =>
-              applyScientificFunction('factorial')
+              applyScientificFunction(
+                'factorial',
+              )
             }
             variant="function"
           />
@@ -1099,6 +1503,9 @@ const App = () => {
         : renderBasicCalculator()
       }
 
+
+      {renderHistory()}
+
     </SafeAreaView>
   );
 };
@@ -1112,7 +1519,6 @@ const styles = StyleSheet.create({
 
   container: {
     flex: 1,
-
     backgroundColor: '#111111',
   },
 
@@ -1133,6 +1539,7 @@ const styles = StyleSheet.create({
     paddingBottom: 5,
   },
 
+
   expression: {
     fontSize: 20,
 
@@ -1141,6 +1548,7 @@ const styles = StyleSheet.create({
     marginBottom: 5,
   },
 
+
   result: {
     fontSize: 48,
 
@@ -1148,7 +1556,12 @@ const styles = StyleSheet.create({
 
     fontWeight: '600',
   },
-
+historyButtonText: {
+  color: '#FFFFFF',
+  fontSize: 14,
+  fontWeight: '700',
+  textAlign: 'center',
+},
 
   // ===========================================
   // SPEAKER
@@ -1201,17 +1614,233 @@ const styles = StyleSheet.create({
 
 
   // ===========================================
-  // MODE BUTTON
+  // TOP BUTTONS
   // ===========================================
+
+  topButtonsRow: {
+    flexDirection: 'row',
+
+    justifyContent: 'flex-end',
+
+    alignItems: 'center',
+
+    gap: 8,
+
+    height: 48,
+
+    marginBottom: 3,
+  },
+
 
   modeButton: {
     height: 48,
 
     width: '28%',
+  },
 
-    alignSelf: 'flex-end',
+
+  historyModeButton: {
+    height: 48,
+
+    width: '28%',
+  },
+
+
+  // ===========================================
+  // HISTORY OVERLAY
+  // ===========================================
+
+  historyOverlay: {
+    position: 'absolute',
+
+    top: 0,
+
+    left: 0,
+
+    right: 0,
+
+    bottom: 0,
+
+    backgroundColor: 'rgba(0,0,0,0.85)',
+
+    zIndex: 100,
+  },
+
+
+  historyContainer: {
+    flex: 1,
+
+    backgroundColor: '#1C1C1C',
+
+    marginTop: 50,
+
+    borderTopLeftRadius: 25,
+
+    borderTopRightRadius: 25,
+
+    paddingHorizontal: 18,
+
+    paddingTop: 20,
+
+    paddingBottom: 15,
+  },
+
+
+  historyHeader: {
+    flexDirection: 'row',
+
+    justifyContent: 'space-between',
+
+    alignItems: 'center',
+
+    marginBottom: 15,
+  },
+
+
+  historyTitle: {
+    color: '#FFFFFF',
+
+    fontSize: 24,
+
+    fontWeight: '700',
+  },
+
+
+  closeButton: {
+    color: '#FFFFFF',
+
+    fontSize: 28,
+
+    fontWeight: '600',
+
+    paddingHorizontal: 8,
+  },
+
+
+  // ===========================================
+  // HISTORY ITEMS
+  // ===========================================
+
+  historyItem: {
+    flexDirection: 'row',
+
+    justifyContent: 'space-between',
+
+    alignItems: 'center',
+
+    backgroundColor: '#292929',
+
+    borderRadius: 14,
+
+    paddingHorizontal: 15,
+
+    paddingVertical: 12,
+
+    marginBottom: 10,
+  },
+
+
+  historyTextContainer: {
+    flex: 1,
+
+    marginRight: 10,
+  },
+
+
+  historyExpression: {
+    color: '#AAAAAA',
+
+    fontSize: 17,
 
     marginBottom: 3,
+  },
+
+
+  historyResult: {
+    color: '#FFFFFF',
+
+    fontSize: 22,
+
+    fontWeight: '600',
+  },
+
+
+  historyDate: {
+    color: '#777777',
+
+    fontSize: 11,
+
+    marginTop: 5,
+  },
+
+
+  deleteHistoryButton: {
+    width: 45,
+
+    height: 45,
+
+    justifyContent: 'center',
+
+    alignItems: 'center',
+
+    borderRadius: 10,
+
+    backgroundColor: '#333333',
+  },
+
+
+  deleteHistoryText: {
+    fontSize: 20,
+  },
+
+
+  // ===========================================
+  // EMPTY HISTORY
+  // ===========================================
+
+  emptyHistoryContainer: {
+    flex: 1,
+
+    justifyContent: 'center',
+
+    alignItems: 'center',
+
+    paddingTop: 100,
+  },
+
+
+  emptyHistory: {
+    color: '#888888',
+
+    fontSize: 17,
+
+    textAlign: 'center',
+  },
+
+
+  // ===========================================
+  // CLEAR HISTORY
+  // ===========================================
+
+  clearHistoryButton: {
+    backgroundColor: '#333333',
+
+    borderRadius: 14,
+
+    paddingVertical: 15,
+
+    alignItems: 'center',
+
+    marginTop: 10,
+  },
+
+
+  clearHistoryText: {
+    color: '#FFFFFF',
+
+    fontSize: 16,
+
+    fontWeight: '700',
   },
 
 });
